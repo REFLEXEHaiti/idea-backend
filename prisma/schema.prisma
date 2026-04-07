@@ -1,0 +1,539 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  FORMATEUR
+  APPRENANT
+  SPECTATEUR
+}
+
+enum StatutDebat {
+  BROUILLON
+  OUVERT
+  FERME
+  ARCHIVE
+}
+
+enum TypeVote {
+  POUR
+  CONTRE
+}
+
+enum TypeNotification {
+  NOUVEAU_DEBAT
+  NOUVEAU_MESSAGE
+  NOUVEAU_VOTE
+  NOUVEL_ABONNE
+  MENTION
+}
+
+enum NiveauCours {
+  DEBUTANT
+  INTERMEDIAIRE
+  AVANCE
+}
+
+enum StatutInscription {
+  EN_COURS
+  TERMINE
+  ABANDONNE
+}
+
+enum StatutLive {
+  PROGRAMME
+  EN_DIRECT
+  TERMINE
+}
+
+enum TypeBadge {
+  PREMIER_DEBAT
+  RHETEUR_ARGENTE
+  RHETEUR_OR
+  FORMATEUR_ETOILE
+  CHAMPION
+  CONTRIBUTEUR
+  VOTEUR_ACTIF
+}
+
+enum StatutTournoi {
+  INSCRIPTION
+  EN_COURS
+  TERMINE
+  ANNULE
+}
+
+enum StatutMatch {
+  PROGRAMME
+  EN_DIRECT
+  TERMINE
+}
+
+enum StatutAbonnement {
+  ACTIF
+  EXPIRE
+  ANNULE
+}
+
+enum TypePlan {
+  GRATUIT
+  PREMIUM
+  INSTITUTION
+}
+
+model User {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  motDePasse String   @map("mot_de_passe")
+  prenom     String
+  nom        String
+  role       Role     @default(APPRENANT)
+  actif      Boolean  @default(true)
+  bio        String?
+  photoUrl   String?  @map("photo_url")
+  ville      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  resetToken       String?
+  resetTokenExpire DateTime?
+
+  sessions              Session[]
+  debats                Debat[]
+  messages              Message[]
+  votes                 Vote[]
+  notifications         Notification[]
+  abonnements           Abonnement[]         @relation("abonne")
+  abonnes               Abonnement[]         @relation("cible")
+  coursCreees           Cours[]
+  inscriptions          Inscription[]
+  progressions          ProgressionLecon[]
+  resultatsQuiz         ResultatQuiz[]
+  livesCreees           Live[]
+  messagesLive          MessageLive[]
+  points                PointsUtilisateur?
+  badges                Badge[]
+  challenges            ParticipationChallenge[]
+  tournoisCrees         Tournoi[]
+  equipesCapitaine      Equipe[]             @relation("capitaine")
+  membresEquipe         MembreEquipe[]
+  abonnementPremium     Abonnement2[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Debat {
+  id          String      @id @default(uuid())
+  titre       String
+  description String
+  statut      StatutDebat @default(BROUILLON)
+  vues        Int         @default(0)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  createurId String    @map("createur_id")
+  createur   User      @relation(fields: [createurId], references: [id])
+  messages   Message[]
+
+  @@map("debats")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  contenu   String
+  visible   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  auteurId String  @map("auteur_id")
+  auteur   User    @relation(fields: [auteurId], references: [id])
+  debatId  String  @map("debat_id")
+  debat    Debat   @relation(fields: [debatId], references: [id], onDelete: Cascade)
+  votes    Vote[]
+
+  @@map("messages")
+}
+
+model Vote {
+  id        String   @id @default(uuid())
+  type      TypeVote
+  createdAt DateTime @default(now()) @map("created_at")
+
+  votantId  String  @map("votant_id")
+  votant    User    @relation(fields: [votantId], references: [id])
+  messageId String  @map("message_id")
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([votantId, messageId])
+  @@map("votes")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  type      TypeNotification
+  titre     String
+  contenu   String
+  lue       Boolean          @default(false)
+  lienId    String?          @map("lien_id")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Abonnement {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  abonneId String @map("abonne_id")
+  abonne   User   @relation("abonne", fields: [abonneId], references: [id])
+  cibleId  String @map("cible_id")
+  cible    User   @relation("cible", fields: [cibleId], references: [id])
+
+  @@unique([abonneId, cibleId])
+  @@map("abonnements")
+}
+
+model Cours {
+  id          String      @id @default(uuid())
+  titre       String
+  description String
+  niveau      NiveauCours @default(DEBUTANT)
+  imageUrl    String?     @map("image_url")
+  publie      Boolean     @default(false)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  createurId   String        @map("createur_id")
+  createur     User          @relation(fields: [createurId], references: [id])
+  lecons       Lecon[]
+  inscriptions Inscription[]
+
+  @@map("cours")
+}
+
+model Lecon {
+  id        String   @id @default(uuid())
+  titre     String
+  contenu   String
+  ordre     Int
+  dureeMin  Int      @default(10) @map("duree_min")
+  pdfUrl    String?  @map("pdf_url")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  coursId      String             @map("cours_id")
+  cours        Cours              @relation(fields: [coursId], references: [id], onDelete: Cascade)
+  quiz         Quiz?
+  progressions ProgressionLecon[]
+
+  @@map("lecons")
+}
+
+model Quiz {
+  id        String   @id @default(uuid())
+  questions Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  leconId   String         @unique @map("lecon_id")
+  lecon     Lecon          @relation(fields: [leconId], references: [id], onDelete: Cascade)
+  resultats ResultatQuiz[]
+
+  @@map("quiz")
+}
+
+model ResultatQuiz {
+  id        String   @id @default(uuid())
+  score     Int
+  reponses  Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  quizId String @map("quiz_id")
+  quiz   Quiz   @relation(fields: [quizId], references: [id])
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("resultats_quiz")
+}
+
+model Inscription {
+  id        String            @id @default(uuid())
+  statut    StatutInscription @default(EN_COURS)
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+
+  userId  String @map("user_id")
+  user    User   @relation(fields: [userId], references: [id])
+  coursId String @map("cours_id")
+  cours   Cours  @relation(fields: [coursId], references: [id])
+
+  @@unique([userId, coursId])
+  @@map("inscriptions")
+}
+
+model ProgressionLecon {
+  id        String   @id @default(uuid())
+  termine   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  userId  String @map("user_id")
+  user    User   @relation(fields: [userId], references: [id])
+  leconId String @map("lecon_id")
+  lecon   Lecon  @relation(fields: [leconId], references: [id])
+
+  @@unique([userId, leconId])
+  @@map("progressions_lecons")
+}
+
+model Live {
+  id           String     @id @default(uuid())
+  titre        String
+  description  String
+  statut       StatutLive @default(PROGRAMME)
+  dateDebut    DateTime   @map("date_debut")
+  youtubeUrl   String?    @map("youtube_url")
+  replayUrl    String?    @map("replay_url")
+  miniatureUrl String?    @map("miniature_url")
+  vues         Int        @default(0)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  createurId   String        @map("createur_id")
+  createur     User          @relation(fields: [createurId], references: [id])
+  messagesLive MessageLive[]
+
+  @@map("lives")
+}
+
+model MessageLive {
+  id        String   @id @default(uuid())
+  contenu   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  auteurId String @map("auteur_id")
+  auteur   User   @relation(fields: [auteurId], references: [id])
+  liveId   String @map("live_id")
+  live     Live   @relation(fields: [liveId], references: [id], onDelete: Cascade)
+
+  @@map("messages_live")
+}
+
+model PointsUtilisateur {
+  id        String   @id @default(uuid())
+  points    Int      @default(0)
+  niveau    Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  userId String @unique @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("points_utilisateurs")
+}
+
+model Badge {
+  id          String    @id @default(uuid())
+  type        TypeBadge
+  titre       String
+  description String
+  imageUrl    String?   @map("image_url")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("badges")
+}
+
+model Challenge {
+  id               String   @id @default(uuid())
+  titre            String
+  description      String
+  pointsRecompense Int      @map("points_recompense")
+  dateDebut        DateTime @map("date_debut")
+  dateFin          DateTime @map("date_fin")
+  actif            Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  participations ParticipationChallenge[]
+
+  @@map("challenges")
+}
+
+model ParticipationChallenge {
+  id        String   @id @default(uuid())
+  termine   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id])
+  challengeId String    @map("challenge_id")
+  challenge   Challenge @relation(fields: [challengeId], references: [id])
+
+  @@unique([userId, challengeId])
+  @@map("participations_challenges")
+}
+
+model Tournoi {
+  id              String        @id @default(uuid())
+  nom             String
+  description     String
+  statut          StatutTournoi @default(INSCRIPTION)
+  maxEquipes      Int           @default(8) @map("max_equipes")
+  dateDebut       DateTime      @map("date_debut")
+  dateFin         DateTime?     @map("date_fin")
+  prixInscription Float         @default(0) @map("prix_inscription")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  createurId String  @map("createur_id")
+  createur   User    @relation(fields: [createurId], references: [id])
+  equipes    Equipe[]
+  matchs     Match[]
+  sponsors   SponsorTournoi[]
+
+  @@map("tournois")
+}
+
+model Equipe {
+  id        String   @id @default(uuid())
+  nom       String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tournoiId   String  @map("tournoi_id")
+  tournoi     Tournoi @relation(fields: [tournoiId], references: [id])
+  capitaineId String  @map("capitaine_id")
+  capitaine   User    @relation("capitaine", fields: [capitaineId], references: [id])
+
+  membres   MembreEquipe[]
+  matchsDom Match[]        @relation("equipe_domicile")
+  matchsExt Match[]        @relation("equipe_exterieur")
+
+  @@map("equipes")
+}
+
+model MembreEquipe {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  equipeId String @map("equipe_id")
+  equipe   Equipe @relation(fields: [equipeId], references: [id])
+  userId   String @map("user_id")
+  user     User   @relation(fields: [userId], references: [id])
+
+  @@unique([equipeId, userId])
+  @@map("membres_equipes")
+}
+
+model Match {
+  id           String      @id @default(uuid())
+  sujet        String
+  statut       StatutMatch @default(PROGRAMME)
+  dateMatch    DateTime    @map("date_match")
+  scoreEquipe1 Int         @default(0) @map("score_equipe1")
+  scoreEquipe2 Int         @default(0) @map("score_equipe2")
+  gagnantId    String?     @map("gagnant_id")
+  youtubeUrl   String?     @map("youtube_url")
+  round        Int         @default(1)
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  tournoiId String  @map("tournoi_id")
+  tournoi   Tournoi @relation(fields: [tournoiId], references: [id])
+  equipe1Id String  @map("equipe1_id")
+  equipe1   Equipe  @relation("equipe_domicile", fields: [equipe1Id], references: [id])
+  equipe2Id String  @map("equipe2_id")
+  equipe2   Equipe  @relation("equipe_exterieur", fields: [equipe2Id], references: [id])
+
+  @@map("matchs")
+}
+
+model Abonnement2 {
+  id        String           @id @default(uuid())
+  plan      TypePlan         @default(GRATUIT)
+  statut    StatutAbonnement @default(ACTIF)
+  dateDebut DateTime         @default(now()) @map("date_debut")
+  dateFin   DateTime?        @map("date_fin")
+  stripeId  String?          @map("stripe_id")
+  montant   Float            @default(0)
+  devise    String           @default("USD")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("abonnements2")
+}
+
+model Tenant {
+  id          String   @id @default(uuid())
+  nom         String
+  slug        String   @unique
+  description String?
+  logoUrl     String?  @map("logo_url")
+  couleur     String   @default("#1e3a5f")
+  actif       Boolean  @default(true)
+  pays        String   @default("HT")
+  langue      String   @default("fr")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("tenants")
+}
+
+enum TypeContrat {
+  PLATINE
+  OR
+  ARGENT
+  BRONZE
+}
+
+model Sponsor {
+  id          String      @id @default(uuid())
+  nom         String
+  logoUrl     String      @map("logo_url")
+  siteWeb     String?     @map("site_web")
+  description String?
+  typeContrat TypeContrat @default(BRONZE) @map("type_contrat")
+  montant     Float       @default(0)
+  actif       Boolean     @default(true)
+  dateDebut   DateTime    @map("date_debut")
+  dateFin     DateTime    @map("date_fin")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  tournois SponsorTournoi[]
+
+  @@map("sponsors")
+}
+
+model SponsorTournoi {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  sponsorId  String  @map("sponsor_id")
+  sponsor    Sponsor @relation(fields: [sponsorId], references: [id])
+  tournoiId  String  @map("tournoi_id")
+  tournoi    Tournoi @relation(fields: [tournoiId], references: [id])
+
+  @@unique([sponsorId, tournoiId])
+  @@map("sponsors_tournois")
+}
