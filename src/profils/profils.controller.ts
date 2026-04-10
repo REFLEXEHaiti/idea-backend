@@ -10,6 +10,13 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class ProfilsController {
   constructor(private readonly profilsService: ProfilsService) {}
 
+  // GET /api/profils/moi — voir son propre profil (DOIT être avant :id)
+  @UseGuards(JwtAuthGuard)
+  @Get('moi')
+  async getMonProfil(@Request() req: any) {
+    return this.profilsService.getProfil(req.user.id);
+  }
+
   // GET /api/profils/:id — voir le profil d'un utilisateur
   @UseGuards(JwtAuthGuard)
   @Get(':id')
