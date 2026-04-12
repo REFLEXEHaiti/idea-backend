@@ -1,7 +1,6 @@
-import { Controller, Get, Post, Body, Request, UseGuards } from '@nestjs/common';
+// src/quiz/quiz.controller.ts
+import { Controller, Get, Post, Param, Body, Req, UseGuards } from '@nestjs/common';
 import { QuizService } from './quiz.service';
-import { CreerQuizDto } from './dto/creer-quiz.dto';
-import { SoumettreQuizDto } from './dto/soumettre-quiz.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -10,22 +9,27 @@ import { Roles } from '../auth/roles.decorator';
 export class QuizController {
   constructor(private readonly quizService: QuizService) {}
 
+  @Get('lecon/:leconId')
+  async findByLecon(@Param('leconId') leconId: string) {
+    return this.quizService.findByLecon(leconId);
+  }
+
+  @Get('mes-resultats')
+  @UseGuards(JwtAuthGuard)
+  async getMesResultats(@Req() req: any) {
+    return this.quizService.getMesResultats(req.user.id);
+  }
+
+  @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'FORMATEUR')
-  @Post()
-  async creer(@Body() dto: CreerQuizDto) {
-    return this.quizService.creer(dto);
+  async creer(@Body() body: any) {
+    return this.quizService.creer(body);
   }
 
+  @Post(':id/soumettre')
   @UseGuards(JwtAuthGuard)
-  @Post('soumettre')
-  async soumettre(@Request() req: any, @Body() dto: SoumettreQuizDto) {
-    return this.quizService.soumettre(req.user.id, dto);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('mes-resultats')
-  async getMesResultats(@Request() req: any) {
-    return this.quizService.getMesResultats(req.user.id);
+  async soumettre(@Param('id') quizId: string, @Body('reponses') reponses: number[], @Req() req: any) {
+    return this.quizService.soumettre(req.user.id, quizId, reponses);
   }
 }

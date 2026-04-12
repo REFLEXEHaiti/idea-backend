@@ -1,34 +1,38 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+// src/analytics/analytics.controller.ts
+import { Controller, Get, Req, UseGuards } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 
 @Controller('analytics')
+@UseGuards(JwtAuthGuard)
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
-  // GET /api/analytics/metriques — ADMIN seulement
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Get('admin')
+  @UseGuards(RolesGuard)
   @Roles('ADMIN')
-  @Get('metriques')
-  async getMetriques() {
-    return this.analyticsService.getMetriques();
+  async getMetriques(@Req() req: any) {
+    return this.analyticsService.getMetriques(req.user.tenantId);
   }
 
-  // GET /api/analytics/top-debats — ADMIN seulement
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Get('admin/top-cours')
+  @UseGuards(RolesGuard)
   @Roles('ADMIN')
-  @Get('top-debats')
-  async getTopDebats() {
-    return this.analyticsService.getTopDebats();
+  async getTopCours(@Req() req: any) {
+    return this.analyticsService.getTopCours(req.user.tenantId);
   }
 
-  // GET /api/analytics/top-contributeurs — ADMIN seulement
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Get('admin/top-contributeurs')
+  @UseGuards(RolesGuard)
   @Roles('ADMIN')
-  @Get('top-contributeurs')
-  async getTopContributeurs() {
-    return this.analyticsService.getTopContributeurs();
+  async getTopContributeurs(@Req() req: any) {
+    return this.analyticsService.getTopContributeurs(req.user.tenantId);
+  }
+
+  @Get('dashboard')
+  async getDashboard(@Req() req: any) {
+    return this.analyticsService.getDashboardApprenant(req.user.id, req.user.tenantId);
   }
 }

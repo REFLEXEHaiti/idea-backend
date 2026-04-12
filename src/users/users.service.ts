@@ -1,48 +1,57 @@
+// src/users/users.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Role } from '@prisma/client';
-import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findByEmail(email: string) {
-    return this.prisma.user.findUnique({ where: { email } });
-  }
-
   async findById(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
-        id: true,
-        email: true,
-        prenom: true,
-        nom: true,
-        role: true,
-        actif: true,
-        createdAt: true,
+        id: true, email: true, prenom: true, nom: true,
+        role: true, actif: true, tenantId: true, createdAt: true,
       },
     });
     if (!user) throw new NotFoundException('Utilisateur introuvable');
     return user;
   }
 
-  async create(data: {
-    email: string;
-    motDePasse: string;
-    prenom: string;
-    nom: string;
-    role?: Role;
-  }) {
-    const motDePasseHache = await bcrypt.hash(data.motDePasse, 12);
-    return this.prisma.user.create({
-      data: { ...data, motDePasse: motDePasseHache },
-      select: { id: true, email: true, prenom: true, nom: true, role: true, createdAt: true },
+  async findByEmailAndTenant(email: string, tenantId: string) {
+    return this.prisma.user.findUnique({
+      where: { email_tenantId: { email, tenantId } },
     });
   }
 
-  async verifierMotDePasse(motDePasse: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(motDePasse, hash);
+  // Lister les users d'un tenant (ADMIN seulement)
+  async listerParTenant(tenantId: string) {
+    return this.prisma.user.findMany({
+      where: { tenantId, actif: true },
+      select: {
+        id: true, email: true, prenom: true, nom: true,
+        role: true, ville: true, createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async changerRole(id: string, role: string, tenantId: string) {
+    const user = await this.prisma.user.findFirst({ where: { id, tenantId } });
+    if (!user) throw new NotFoundException('Utilisateur introuvable dans ce tenant');
+    return this.prisma.user.update({
+      where: { id },
+      data: { role: role as any },
+      select: { id: true, email: true, prenom: true, nom: true, role: true },
+    });
+  }
+
+  async desactiver(id: string, tenantId: string) {
+    const user = await this.prisma.user.findFirst({ where: { id, tenantId } });
+    if (!user) throw new NotFoundException('Utilisateur introuvable dans ce tenant');
+    return this.prisma.user.update({
+      where: { id },
+      data: { actif: false },
+    });
   }
 }

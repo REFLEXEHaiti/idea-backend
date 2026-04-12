@@ -1,3 +1,5 @@
+// src/websocket/debats.gateway.ts
+// Gateway WebSocket — supporte le multi-tenant via rooms nommées tenant:debatId
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -11,9 +13,7 @@ import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 
 @WebSocketGateway({
-  cors: {
-    origin: '*',   // Le CORS REST est géré dans main.ts — ici on laisse Socket.IO gérer
-  },
+  cors: { origin: '*' },
   namespace: '/debats',
 })
 export class DebatsGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -21,8 +21,6 @@ export class DebatsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   server: Server;
 
   private readonly logger = new Logger(DebatsGateway.name);
-
-  // Spectateurs par debatId
   private spectateurs = new Map<string, Set<string>>();
 
   handleConnection(client: Socket) {
@@ -31,60 +29,76 @@ export class DebatsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Client déconnecté : ${client.id}`);
-    // Retirer le client de toutes les rooms
-    this.spectateurs.forEach((clients, debatId) => {
+    this.spectateurs.forEach((clients, roomKey) => {
       if (clients.has(client.id)) {
         clients.delete(client.id);
-        this.broadcastSpectateurs(debatId);
+        this.broadcastSpectateurs(roomKey);
       }
     });
   }
 
-  // Client rejoint un débat
   @SubscribeMessage('rejoindre-debat')
   handleRejoindre(
     @ConnectedSocket() client: Socket,
-    @MessageBody() debatId: string,
+    @MessageBody() data: { debatId: string; tenantSlug?: string },
   ) {
-    client.join(`debat:${debatId}`);
-    if (!this.spectateurs.has(debatId)) {
-      this.spectateurs.set(debatId, new Set());
-    }
-    this.spectateurs.get(debatId)!.add(client.id);
-    this.broadcastSpectateurs(debatId);
-    this.logger.log(`Client ${client.id} a rejoint le débat ${debatId}`);
+    const roomKey = data.tenantSlug ? `${data.tenantSlug}:debat:${data.debatId}` : `debat:${data.debatId}`;
+    client.join(roomKey);
+    if (!this.spectateurs.has(roomKey)) this.spectateurs.set(roomKey, new Set());
+    this.spectateurs.get(roomKey)!.add(client.id);
+    this.broadcastSpectateurs(roomKey);
+    this.logger.log(`Client ${client.id} a rejoint ${roomKey}`);
   }
 
-  // Client quitte un débat
   @SubscribeMessage('quitter-debat')
   handleQuitter(
     @ConnectedSocket() client: Socket,
-    @MessageBody() debatId: string,
+    @MessageBody() data: { debatId: string; tenantSlug?: string },
   ) {
-    client.leave(`debat:${debatId}`);
-    this.spectateurs.get(debatId)?.delete(client.id);
-    this.broadcastSpectateurs(debatId);
+    const roomKey = data.tenantSlug ? `${data.tenantSlug}:debat:${data.debatId}` : `debat:${data.debatId}`;
+    client.leave(roomKey);
+    this.spectateurs.get(roomKey)?.delete(client.id);
+    this.broadcastSpectateurs(roomKey);
+  }
+
+  // Rejoindre un live
+  @SubscribeMessage('rejoindre-live')
+  handleRejoindreLive(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { liveId: string; tenantSlug?: string },
+  ) {
+    const roomKey = data.tenantSlug ? `${data.tenantSlug}:live:${data.liveId}` : `live:${data.liveId}`;
+    client.join(roomKey);
+    this.logger.log(`Client ${client.id} a rejoint live ${roomKey}`);
   }
 
   // ── Méthodes appelées par les services ──
 
-  // Diffuser un nouveau message à tous les participants du débat
   diffuserNouveauMessage(debatId: string, message: any) {
+    // Diffuse vers toutes les rooms qui contiennent cet debatId
     this.server.to(`debat:${debatId}`).emit('nouveau-message', message);
+    // Cherche aussi les rooms avec tenant prefix
+    this.spectateurs.forEach((_, roomKey) => {
+      if (roomKey.includes(`debat:${debatId}`)) {
+        this.server.to(roomKey).emit('nouveau-message', message);
+      }
+    });
   }
 
-  // Diffuser une mise à jour des votes
   diffuserVotesDebat(debatId: string, stats: any) {
     this.server.to(`debat:${debatId}`).emit('votes-mis-a-jour', stats);
   }
 
-  // Diffuser changement de statut d'un débat (ouverture, fermeture)
   diffuserStatutDebat(debatId: string, statut: string) {
     this.server.to(`debat:${debatId}`).emit('statut-debat', { debatId, statut });
   }
 
-  private broadcastSpectateurs(debatId: string) {
-    const count = this.spectateurs.get(debatId)?.size ?? 0;
-    this.server.to(`debat:${debatId}`).emit('spectateurs', { debatId, count });
+  diffuserMessageLive(liveId: string, message: any) {
+    this.server.to(`live:${liveId}`).emit('nouveau-message-live', message);
+  }
+
+  private broadcastSpectateurs(roomKey: string) {
+    const count = this.spectateurs.get(roomKey)?.size ?? 0;
+    this.server.to(roomKey).emit('spectateurs', { roomKey, count });
   }
 }

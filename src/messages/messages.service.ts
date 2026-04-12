@@ -1,13 +1,6 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-  BadRequestException,
-  Inject,
-  Optional,
-} from '@nestjs/common';
+// src/messages/messages.service.ts
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreerMessageDto } from './dto/creer-message.dto';
 import { DebatsGateway } from '../websocket/debats.gateway';
 
 @Injectable()
@@ -17,39 +10,32 @@ export class MessagesService {
     @Optional() private readonly gateway: DebatsGateway,
   ) {}
 
-  async creer(auteurId: string, dto: CreerMessageDto) {
-    const debat = await this.prisma.debat.findUnique({ where: { id: dto.debatId } });
+  async creer(auteurId: string, tenantId: string, data: {
+    contenu: string; debatId: string; stance?: string;
+  }) {
+    const debat = await this.prisma.debat.findFirst({ where: { id: data.debatId, tenantId } });
     if (!debat) throw new NotFoundException('Débat introuvable');
-    if (debat.statut !== 'OUVERT') {
-      throw new BadRequestException("Ce débat n'est pas ouvert aux messages");
-    }
+    if (debat.statut !== 'OUVERT') throw new BadRequestException("Ce débat n'est pas ouvert aux messages");
 
     const message = await this.prisma.message.create({
       data: {
-        contenu:  dto.contenu,
-        stance:   dto.stance ?? 'NEUTRE',
+        contenu: data.contenu,
+        stance: (data.stance as any) ?? 'NEUTRE',
         auteurId,
-        debatId:  dto.debatId,
+        debatId: data.debatId,
       },
-      include: {
-        auteur: { select: { id: true, prenom: true, nom: true, role: true } },
-      },
+      include: { auteur: { select: { id: true, prenom: true, nom: true, role: true } } },
     });
 
-    // Diffusion temps réel
-    this.gateway?.diffuserNouveauMessage(dto.debatId, message);
-
+    this.gateway?.diffuserNouveauMessage(data.debatId, message);
     return message;
   }
 
   async masquer(id: string, userId: string, userRole: string) {
-    const message = await this.prisma.message.findUnique({
-      where: { id },
-      include: { debat: true },
-    });
+    const message = await this.prisma.message.findUnique({ where: { id }, include: { debat: true } });
     if (!message) throw new NotFoundException('Message introuvable');
     if (message.debat.createurId !== userId && userRole !== 'ADMIN') {
-      throw new ForbiddenException('Vous ne pouvez pas modérer ce message');
+      throw new ForbiddenException('Non autorisé');
     }
     return this.prisma.message.update({ where: { id }, data: { visible: false } });
   }
@@ -58,7 +44,7 @@ export class MessagesService {
     const message = await this.prisma.message.findUnique({ where: { id } });
     if (!message) throw new NotFoundException('Message introuvable');
     if (message.auteurId !== userId && userRole !== 'ADMIN') {
-      throw new ForbiddenException('Vous ne pouvez pas supprimer ce message');
+      throw new ForbiddenException('Non autorisé');
     }
     return this.prisma.message.delete({ where: { id } });
   }

@@ -1,15 +1,5 @@
 // src/auth/dto/register.dto.ts
-// Définit et valide les données attendues pour l'inscription
-// class-validator vérifie automatiquement chaque champ
-
-import {
-  IsEmail,
-  IsString,
-  MinLength,
-  MaxLength,
-  IsEnum,
-  IsOptional,
-} from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, IsEnum, IsOptional } from 'class-validator';
 import { Role } from '@prisma/client';
 
 export class RegisterDto {
@@ -22,16 +12,15 @@ export class RegisterDto {
   motDePasse: string;
 
   @IsString()
-  @MinLength(2, { message: 'Le prénom doit contenir au moins 2 caractères' })
+  @MinLength(2)
   @MaxLength(50)
   prenom: string;
 
   @IsString()
-  @MinLength(2, { message: 'Le nom doit contenir au moins 2 caractères' })
+  @MinLength(2)
   @MaxLength(50)
   nom: string;
 
-  // Le rôle est optionnel à l'inscription — par défaut APPRENANT
   @IsOptional()
   @IsEnum(Role, { message: 'Rôle invalide' })
   role?: Role;
@@ -46,5 +35,7 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
-  niveauAcademique?: string;
+  langue?: string;
+
+  // tenant_id résolu par le middleware — ne pas exposer dans le DTO
 }

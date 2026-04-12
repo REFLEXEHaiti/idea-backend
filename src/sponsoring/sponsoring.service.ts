@@ -1,19 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+// src/sponsoring/sponsoring.service.ts
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class SponsoringService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async creerSponsor(data: {
-    nom: string;
-    logoUrl: string;
-    siteWeb?: string;
-    description?: string;
-    typeContrat: string | any;
-    montant: number;
-    dateDebut: string;
-    dateFin: string;
+  async creerSponsor(tenantId: string, data: {
+    nom: string; logoUrl: string; siteWeb?: string; description?: string;
+    typeContrat: string; montant: number; dateDebut: string; dateFin: string;
   }) {
     return this.prisma.sponsor.create({
       data: {
@@ -21,45 +16,29 @@ export class SponsoringService {
         typeContrat: data.typeContrat as any,
         dateDebut: new Date(data.dateDebut),
         dateFin: new Date(data.dateFin),
+        tenantId,
       },
     });
   }
 
-  async getSponsorsActifs() {
+  async getSponsorsActifs(tenantId: string) {
     const maintenant = new Date();
     return this.prisma.sponsor.findMany({
-      where: {
-        actif: true,
-        dateDebut: { lte: maintenant },
-        dateFin: { gte: maintenant },
-      },
+      where: { tenantId, actif: true, dateDebut: { lte: maintenant }, dateFin: { gte: maintenant } },
       orderBy: { montant: 'desc' },
     });
   }
 
-  async getSponsorsTournoi(tournoiId: string) {
-    return this.prisma.sponsorTournoi.findMany({
-      where: { tournoiId },
-      include: { sponsor: true },
-    });
-  }
-
-  async associerSponsorTournoi(sponsorId: string, tournoiId: string) {
-    return this.prisma.sponsorTournoi.create({
-      data: { sponsorId, tournoiId },
-      include: { sponsor: true },
-    });
-  }
-
-  async listerTous() {
+  async listerTous(tenantId: string) {
     return this.prisma.sponsor.findMany({
+      where: { tenantId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async modifierSponsor(id: string, data: any) {
-    return this.prisma.sponsor.update({
-      where: { id },
+  async modifierSponsor(id: string, tenantId: string, data: any) {
+    return this.prisma.sponsor.updateMany({
+      where: { id, tenantId },
       data: {
         ...data,
         typeContrat: data.typeContrat as any,
@@ -69,8 +48,15 @@ export class SponsoringService {
     });
   }
 
-  async supprimerSponsor(id: string) {
+  async supprimerSponsor(id: string, tenantId: string) {
     await this.prisma.sponsorTournoi.deleteMany({ where: { sponsorId: id } });
-    return this.prisma.sponsor.delete({ where: { id } });
+    return this.prisma.sponsor.deleteMany({ where: { id, tenantId } });
+  }
+
+  async associerSponsorTournoi(sponsorId: string, tournoiId: string) {
+    return this.prisma.sponsorTournoi.create({
+      data: { sponsorId, tournoiId },
+      include: { sponsor: true },
+    });
   }
 }

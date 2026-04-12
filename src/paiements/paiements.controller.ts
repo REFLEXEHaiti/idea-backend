@@ -1,7 +1,5 @@
-import {
-  Controller, Post, Get, Patch, Body, Headers, Param,
-  RawBodyRequest, Req, Request, UseGuards,
-} from '@nestjs/common';
+// src/paiements/paiements.controller.ts
+import { Controller, Get, Post, Body, Req, UseGuards } from '@nestjs/common';
 import { PaiementsService } from './paiements.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -11,84 +9,72 @@ import { Roles } from '../auth/roles.decorator';
 export class PaiementsController {
   constructor(private readonly paiementsService: PaiementsService) {}
 
-  // POST /api/paiements/stripe/session
+  // Tarifs de la plateforme courante
+  @Get('tarifs')
+  async getTarifs(@Req() req: any) {
+    const tenantSlug = req['tenantSlug'] ?? 'lex';
+    return this.paiementsService.getTarifs(tenantSlug);
+  }
+
+  // Mon abonnement actif
+  @Get('mon-abonnement')
   @UseGuards(JwtAuthGuard)
+  async monAbonnement(@Req() req: any) {
+    return this.paiementsService.monAbonnement(req.user.id);
+  }
+
+  // Créer session Stripe
   @Post('stripe/session')
-  async creerSession(@Request() req: any, @Body() body: { plan: string }) {
-    return this.paiementsService.creerSessionStripe(req.user.id, body.plan);
-  }
-
-  // POST /api/paiements/stripe/webhook — appelé par Stripe
-  @Post('stripe/webhook')
-  async webhook(
-    @Req() req: RawBodyRequest<Request>,
-    @Headers('stripe-signature') signature: string,
-  ) {
-    return this.paiementsService.handleWebhookStripe(
-      req.rawBody as Buffer,
-      signature,
-    );
-  }
-
-  // POST /api/paiements/moncash/initier
   @UseGuards(JwtAuthGuard)
+  async creerSessionStripe(@Body('plan') plan: string, @Req() req: any) {
+    const tenantSlug = req.user.tenantSlug ?? req['tenantSlug'] ?? 'lex';
+    return this.paiementsService.creerSessionStripe(req.user.id, plan, tenantSlug);
+  }
+
+  // Initier paiement MonCash
   @Post('moncash/initier')
-  async initierMoncash(
-    @Request() req: any,
-    @Body() body: { montantHTG: number; plan: string },
+  @UseGuards(JwtAuthGuard)
+  async initierMonCash(
+    @Body('montantHTG') montantHTG: number,
+    @Body('plan') plan: string,
+    @Req() req: any,
   ) {
-    return this.paiementsService.initierPaiementMonCash(
-      req.user.id,
-      body.montantHTG,
-      body.plan,
-    );
+    const tenantSlug = req.user.tenantSlug ?? 'lex';
+    return this.paiementsService.initierPaiementMonCash(req.user.id, montantHTG, plan, tenantSlug);
   }
 
-  // GET /api/paiements/statut
+  // Vérifier paiement MonCash
+  @Post('moncash/verifier')
   @UseGuards(JwtAuthGuard)
-  @Get('statut')
-  async getStatut(@Request() req: any) {
-    const premium = await this.paiementsService.estPremium(req.user.id);
-    return { premium };
+  async verifierMonCash(@Body('orderId') orderId: string) {
+    return this.paiementsService.verifierPaiementMonCash(orderId);
   }
 
-  // GET /api/paiements/moncash/verifier
-  @UseGuards(JwtAuthGuard)
-  @Get('moncash/verifier')
-  async verifierMoncash(@Body() body: { orderId: string }) {
-    return this.paiementsService.verifierPaiementMonCash(body.orderId);
-  }
-
-  // ─── ADMIN ───────────────────────────────────────────────────
-
-  // GET /api/paiements/admin/liste — lister tous les abonnements
+  // Admin — lister abonnements du tenant
+  @Get('admin/abonnements')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  @Get('admin/liste')
-  async listerAbonnements() {
-    return this.paiementsService.listerAbonnements();
+  async listerAbonnements(@Req() req: any) {
+    return this.paiementsService.listerAbonnements(req.user.tenantId);
   }
 
-  // POST /api/paiements/admin/valider — valider manuellement un paiement
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  // Admin — valider paiement manuellement
   @Post('admin/valider')
-  async validerManuellement(
-    @Body() body: { userId: string; plan: string; reference: string; methode: string },
-  ) {
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  async validerManuellement(@Body() body: {
+    userId: string; plan: string; reference: string; methode?: string;
+  }) {
     return this.paiementsService.validerPaiementManuellement(
-      body.userId,
-      body.plan,
-      body.reference,
-      body.methode,
+      body.userId, body.plan, body.reference, body.methode,
     );
   }
 
-  // PATCH /api/paiements/admin/revoquer/:userId — révoquer un abonnement
+  // Admin — révoquer abonnement
+  @Post('admin/revoquer')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  @Patch('admin/revoquer/:userId')
-  async revoquerAbonnement(@Param('userId') userId: string) {
+  async revoquer(@Body('userId') userId: string) {
     return this.paiementsService.revoquerAbonnement(userId);
   }
 }

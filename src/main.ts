@@ -1,3 +1,4 @@
+// src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -6,10 +7,14 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // Middleware raw body pour Stripe webhook — doit être avant NestFactory
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+  });
+
   const configService = app.get(ConfigService);
   const port = configService.get<number>('port') ?? 3001;
-  const frontendUrl = configService.get<string>('frontend.url');
+  const frontendUrl = configService.get<string>('frontend.url') ?? '';
 
   app.use(helmet());
   app.use(compression());
@@ -24,22 +29,30 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
-  // ── CORS dynamique ──
-  // En développement : accepte localhost:3000
-  // En production    : lit FRONTEND_URL dans .env (supporte plusieurs URLs séparées par virgule)
+  // ── CORS multi-tenant ──
+  // Accepte les domaines des 3 plateformes + localhost en dev
   const originesAutorisees: (string | RegExp)[] = [
     'http://localhost:3000',
     'http://localhost:3001',
+    'http://localhost:3002',
+    'http://localhost:3003',
+    // Domaines production des 3 plateformes
+    'https://lexhaiti.com',
+    'https://www.lexhaiti.com',
+    'https://techprohaiti.com',
+    'https://www.techprohaiti.com',
+    'https://mediformhaiti.com',
+    'https://www.mediformhaiti.com',
   ];
 
+  // Ajouter les URLs configurées (séparées par virgule)
   if (frontendUrl) {
-    // Supporte plusieurs URLs : FRONTEND_URL=https://debat-haiti.vercel.app,https://www.debathaiti.com
     frontendUrl.split(',').map((u) => u.trim()).forEach((url) => {
       originesAutorisees.push(url);
     });
   }
 
-  // Accepte aussi tous les sous-domaines vercel.app en développement
+  // En dev : accepter tous les sous-domaines vercel.app et localhost
   if (configService.get<string>('nodeEnv') !== 'production') {
     originesAutorisees.push(/\.vercel\.app$/);
     originesAutorisees.push(/localhost:\d+$/);
@@ -53,9 +66,16 @@ async function bootstrap() {
   });
 
   await app.listen(port);
-  console.log(`Serveur démarré : http://localhost:${port}/api`);
-  console.log(`Environnement   : ${configService.get('nodeEnv')}`);
-  console.log(`CORS autorisé   : ${originesAutorisees.filter(o => typeof o === 'string').join(', ')}`);
+
+  console.log('');
+  console.log('╔══════════════════════════════════════════════════════╗');
+  console.log('║          IDEA HAITI — Backend Multi-Tenant            ║');
+  console.log('╚══════════════════════════════════════════════════════╝');
+  console.log(`  URL     : http://localhost:${port}/api`);
+  console.log(`  Env     : ${configService.get('nodeEnv')}`);
+  console.log(`  Tenants : lex | techpro | mediform`);
+  console.log(`  Header  : X-Tenant-ID: <slug>`);
+  console.log('');
 }
 
 bootstrap();

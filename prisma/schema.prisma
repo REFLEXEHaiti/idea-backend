@@ -3,10 +3,14 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
- directUrl = env("DIRECT_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
 
 enum Role {
   ADMIN
@@ -44,6 +48,9 @@ enum TypeNotification {
   NOUVEAU_VOTE
   NOUVEL_ABONNE
   MENTION
+  NOUVEAU_COURS
+  NOUVEAU_LIVE
+  BADGE_OBTENU
 }
 
 enum NiveauCours {
@@ -72,6 +79,9 @@ enum TypeBadge {
   CHAMPION
   CONTRIBUTEUR
   VOTEUR_ACTIF
+  PREMIER_COURS
+  ASSIDU
+  EXPERT
 }
 
 enum StatutTournoi {
@@ -99,9 +109,57 @@ enum TypePlan {
   INSTITUTION
 }
 
+enum TypeContrat {
+  PLATINE
+  OR
+  ARGENT
+  BRONZE
+}
+
+// ─────────────────────────────────────────────
+// TENANT — cœur du système multi-tenant IDEA
+// ─────────────────────────────────────────────
+
+model Tenant {
+  id          String   @id @default(uuid())
+  nom         String
+  slug        String   @unique  // "lex" | "techpro" | "mediform"
+  description String?
+  logoUrl     String?  @map("logo_url")
+  actif       Boolean  @default(true)
+  pays        String   @default("HT")
+  langue      String   @default("fr")
+
+  // ── Champs IDEA Haiti ──
+  domaineWeb        String?  @map("domaine_web")
+  couleursThemeJson Json?    @map("couleurs_theme_json")
+  modulesActifsJson Json?    @map("modules_actifs_json")
+  plateforme        String   @default("idea")
+  emailContact      String?  @map("email_contact")
+  sloganCourt       String?  @map("slogan_court")
+  partenairesJson   Json?    @map("partenaires_json")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users      User[]
+  cours      Cours[]
+  lives      Live[]
+  debats     Debat[]
+  tournois   Tournoi[]
+  challenges Challenge[]
+  sponsors   Sponsor[]
+
+  @@map("tenants")
+}
+
+// ─────────────────────────────────────────────
+// USER — avec tenant_id obligatoire
+// ─────────────────────────────────────────────
+
 model User {
   id         String   @id @default(uuid())
-  email      String   @unique
+  email      String
   motDePasse String   @map("mot_de_passe")
   prenom     String
   nom        String
@@ -110,10 +168,15 @@ model User {
   bio        String?
   photoUrl   String?  @map("photo_url")
   ville      String?
+  whatsapp   String?
+  langue     String   @default("fr")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
   resetToken       String?
   resetTokenExpire DateTime?
+
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
   sessions              Session[]
   debats                Debat[]
@@ -137,6 +200,7 @@ model User {
   abonnementPremium     Abonnement2[]
   votesDebat            VoteDebat[]
 
+  @@unique([email, tenantId])
   @@map("users")
 }
 
@@ -152,98 +216,6 @@ model Session {
   @@map("sessions")
 }
 
-model Debat {
-  id          String      @id @default(uuid())
-  titre       String
-  description String
-  statut      StatutDebat @default(BROUILLON)
-  categorie   String?
-  dateDebut   DateTime?   @map("date_debut")
-  vues        Int         @default(0)
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
-
-  createurId  String       @map("createur_id")
-  createur    User         @relation(fields: [createurId], references: [id])
-  messages    Message[]
-  votesDebat  VoteDebat[]
-
-  @@map("debats")
-}
-
-model Message {
-  id        String    @id @default(uuid())
-  contenu   String
-  visible   Boolean   @default(true)
-  stance    StanceMsg @default(NEUTRE)
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-
-  auteurId String  @map("auteur_id")
-  auteur   User    @relation(fields: [auteurId], references: [id])
-  debatId  String  @map("debat_id")
-  debat    Debat   @relation(fields: [debatId], references: [id], onDelete: Cascade)
-  votes    Vote[]
-
-  @@map("messages")
-}
-
-model Vote {
-  id        String   @id @default(uuid())
-  type      TypeVote
-  createdAt DateTime @default(now()) @map("created_at")
-
-  votantId  String  @map("votant_id")
-  votant    User    @relation(fields: [votantId], references: [id])
-  messageId String  @map("message_id")
-  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-
-  @@unique([votantId, messageId])
-  @@map("votes")
-}
-
-model VoteDebat {
-  id        String       @id @default(uuid())
-  type      TypeVoteDebat
-  createdAt DateTime     @default(now()) @map("created_at")
-
-  votantId String @map("votant_id")
-  votant   User   @relation(fields: [votantId], references: [id])
-  debatId  String @map("debat_id")
-  debat    Debat  @relation(fields: [debatId], references: [id], onDelete: Cascade)
-
-  @@unique([votantId, debatId])
-  @@map("votes_debats")
-}
-
-model Notification {
-  id        String           @id @default(uuid())
-  type      TypeNotification
-  titre     String
-  contenu   String
-  lue       Boolean          @default(false)
-  lienId    String?          @map("lien_id")
-  createdAt DateTime         @default(now()) @map("created_at")
-
-  userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("notifications")
-}
-
-model Abonnement {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now()) @map("created_at")
-
-  abonneId String @map("abonne_id")
-  abonne   User   @relation("abonne", fields: [abonneId], references: [id])
-  cibleId  String @map("cible_id")
-  cible    User   @relation("cible", fields: [cibleId], references: [id])
-
-  @@unique([abonneId, cibleId])
-  @@map("abonnements")
-}
-
 model Cours {
   id          String      @id @default(uuid())
   titre       String
@@ -251,11 +223,15 @@ model Cours {
   niveau      NiveauCours @default(DEBUTANT)
   imageUrl    String?     @map("image_url")
   publie      Boolean     @default(false)
+  categorie   String?
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
-  createurId   String        @map("createur_id")
-  createur     User          @relation(fields: [createurId], references: [id])
+  tenantId   String @map("tenant_id")
+  tenant     Tenant @relation(fields: [tenantId], references: [id])
+  createurId String @map("createur_id")
+  createur   User   @relation(fields: [createurId], references: [id])
+
   lecons       Lecon[]
   inscriptions Inscription[]
 
@@ -269,6 +245,7 @@ model Lecon {
   ordre     Int
   dureeMin  Int      @default(10) @map("duree_min")
   pdfUrl    String?  @map("pdf_url")
+  videoUrl  String?  @map("video_url")
   createdAt DateTime @default(now()) @map("created_at")
 
   coursId      String             @map("cours_id")
@@ -347,8 +324,11 @@ model Live {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
-  createurId   String        @map("createur_id")
-  createur     User          @relation(fields: [createurId], references: [id])
+  tenantId   String @map("tenant_id")
+  tenant     Tenant @relation(fields: [tenantId], references: [id])
+  createurId String @map("createur_id")
+  createur   User   @relation(fields: [createurId], references: [id])
+
   messagesLive MessageLive[]
 
   @@map("lives")
@@ -367,60 +347,71 @@ model MessageLive {
   @@map("messages_live")
 }
 
-model PointsUtilisateur {
-  id        String   @id @default(uuid())
-  points    Int      @default(0)
-  niveau    Int      @default(1)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  userId String @unique @map("user_id")
-  user   User   @relation(fields: [userId], references: [id])
-
-  @@map("points_utilisateurs")
-}
-
-model Badge {
-  id          String    @id @default(uuid())
-  type        TypeBadge
+model Debat {
+  id          String      @id @default(uuid())
   titre       String
   description String
-  imageUrl    String?   @map("image_url")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  statut      StatutDebat @default(BROUILLON)
+  categorie   String?
+  dateDebut   DateTime?   @map("date_debut")
+  vues        Int         @default(0)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
 
-  userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id])
+  tenantId   String @map("tenant_id")
+  tenant     Tenant @relation(fields: [tenantId], references: [id])
+  createurId String @map("createur_id")
+  createur   User   @relation(fields: [createurId], references: [id])
 
-  @@map("badges")
+  messages   Message[]
+  votesDebat VoteDebat[]
+
+  @@map("debats")
 }
 
-model Challenge {
-  id               String   @id @default(uuid())
-  titre            String
-  description      String
-  pointsRecompense Int      @map("points_recompense")
-  dateDebut        DateTime @map("date_debut")
-  dateFin          DateTime @map("date_fin")
-  actif            Boolean  @default(true)
-  createdAt        DateTime @default(now()) @map("created_at")
+model Message {
+  id        String    @id @default(uuid())
+  contenu   String
+  visible   Boolean   @default(true)
+  stance    StanceMsg @default(NEUTRE)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
-  participations ParticipationChallenge[]
+  auteurId String  @map("auteur_id")
+  auteur   User    @relation(fields: [auteurId], references: [id])
+  debatId  String  @map("debat_id")
+  debat    Debat   @relation(fields: [debatId], references: [id], onDelete: Cascade)
+  votes    Vote[]
 
-  @@map("challenges")
+  @@map("messages")
 }
 
-model ParticipationChallenge {
+model Vote {
   id        String   @id @default(uuid())
-  termine   Boolean  @default(false)
+  type      TypeVote
   createdAt DateTime @default(now()) @map("created_at")
 
-  userId      String    @map("user_id")
-  user        User      @relation(fields: [userId], references: [id])
-  challengeId String    @map("challenge_id")
-  challenge   Challenge @relation(fields: [challengeId], references: [id])
+  votantId  String  @map("votant_id")
+  votant    User    @relation(fields: [votantId], references: [id])
+  messageId String  @map("message_id")
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, challengeId])
-  @@map("participations_challenges")
+  @@unique([votantId, messageId])
+  @@map("votes")
+}
+
+model VoteDebat {
+  id        String        @id @default(uuid())
+  type      TypeVoteDebat
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  votantId String @map("votant_id")
+  votant   User   @relation(fields: [votantId], references: [id])
+  debatId  String @map("debat_id")
+  debat    Debat  @relation(fields: [debatId], references: [id], onDelete: Cascade)
+
+  @@unique([votantId, debatId])
+  @@map("votes_debats")
 }
 
 model Tournoi {
@@ -435,11 +426,14 @@ model Tournoi {
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  createurId String  @map("createur_id")
-  createur   User    @relation(fields: [createurId], references: [id])
-  equipes    Equipe[]
-  matchs     Match[]
-  sponsors   SponsorTournoi[]
+  tenantId   String @map("tenant_id")
+  tenant     Tenant @relation(fields: [tenantId], references: [id])
+  createurId String @map("createur_id")
+  createur   User   @relation(fields: [createurId], references: [id])
+
+  equipes  Equipe[]
+  matchs   Match[]
+  sponsors SponsorTournoi[]
 
   @@map("tournois")
 }
@@ -497,6 +491,93 @@ model Match {
   @@map("matchs")
 }
 
+model PointsUtilisateur {
+  id        String   @id @default(uuid())
+  points    Int      @default(0)
+  niveau    Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  userId String @unique @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("points_utilisateurs")
+}
+
+model Badge {
+  id          String    @id @default(uuid())
+  type        TypeBadge
+  titre       String
+  description String
+  imageUrl    String?   @map("image_url")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("badges")
+}
+
+model Challenge {
+  id               String   @id @default(uuid())
+  titre            String
+  description      String
+  pointsRecompense Int      @map("points_recompense")
+  dateDebut        DateTime @map("date_debut")
+  dateFin          DateTime @map("date_fin")
+  actif            Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  participations ParticipationChallenge[]
+
+  @@map("challenges")
+}
+
+model ParticipationChallenge {
+  id        String   @id @default(uuid())
+  termine   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id])
+  challengeId String    @map("challenge_id")
+  challenge   Challenge @relation(fields: [challengeId], references: [id])
+
+  @@unique([userId, challengeId])
+  @@map("participations_challenges")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  type      TypeNotification
+  titre     String
+  contenu   String
+  lue       Boolean          @default(false)
+  lienId    String?          @map("lien_id")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Abonnement {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  abonneId String @map("abonne_id")
+  abonne   User   @relation("abonne", fields: [abonneId], references: [id])
+  cibleId  String @map("cible_id")
+  cible    User   @relation("cible", fields: [cibleId], references: [id])
+
+  @@unique([abonneId, cibleId])
+  @@map("abonnements")
+}
+
 model Abonnement2 {
   id        String           @id @default(uuid())
   plan      TypePlan         @default(GRATUIT)
@@ -505,36 +586,13 @@ model Abonnement2 {
   dateFin   DateTime?        @map("date_fin")
   stripeId  String?          @map("stripe_id")
   montant   Float            @default(0)
-  devise    String           @default("USD")
+  devise    String           @default("HTG")
   createdAt DateTime         @default(now()) @map("created_at")
 
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id])
 
   @@map("abonnements2")
-}
-
-model Tenant {
-  id          String   @id @default(uuid())
-  nom         String
-  slug        String   @unique
-  description String?
-  logoUrl     String?  @map("logo_url")
-  couleur     String   @default("#1e3a5f")
-  actif       Boolean  @default(true)
-  pays        String   @default("HT")
-  langue      String   @default("fr")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  @@map("tenants")
-}
-
-enum TypeContrat {
-  PLATINE
-  OR
-  ARGENT
-  BRONZE
 }
 
 model Sponsor {
@@ -551,6 +609,9 @@ model Sponsor {
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
   tournois SponsorTournoi[]
 
   @@map("sponsors")
@@ -560,10 +621,10 @@ model SponsorTournoi {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now()) @map("created_at")
 
-  sponsorId  String  @map("sponsor_id")
-  sponsor    Sponsor @relation(fields: [sponsorId], references: [id])
-  tournoiId  String  @map("tournoi_id")
-  tournoi    Tournoi @relation(fields: [tournoiId], references: [id])
+  sponsorId String  @map("sponsor_id")
+  sponsor   Sponsor @relation(fields: [sponsorId], references: [id])
+  tournoiId String  @map("tournoi_id")
+  tournoi   Tournoi @relation(fields: [tournoiId], references: [id])
 
   @@unique([sponsorId, tournoiId])
   @@map("sponsors_tournois")

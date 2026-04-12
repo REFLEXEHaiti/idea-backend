@@ -1,11 +1,6 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  Optional,
-} from '@nestjs/common';
+// src/votes/votes.service.ts
+import { Injectable, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreerVoteDto } from './dto/creer-vote.dto';
 import { DebatsGateway } from '../websocket/debats.gateway';
 
 @Injectable()
@@ -15,12 +10,10 @@ export class VotesService {
     @Optional() private readonly gateway: DebatsGateway,
   ) {}
 
-  async voter(votantId: string, dto: CreerVoteDto) {
-    if (!dto.messageId && !dto.debatId) {
-      throw new BadRequestException('messageId ou debatId est requis');
-    }
-    if (dto.debatId) return this.voterDebat(votantId, dto.debatId, dto.type);
-    return this.voterMessage(votantId, dto.messageId!, dto.type);
+  async voter(votantId: string, data: { type: string; messageId?: string; debatId?: string }) {
+    if (!data.messageId && !data.debatId) throw new BadRequestException('messageId ou debatId requis');
+    if (data.debatId) return this.voterDebat(votantId, data.debatId, data.type);
+    return this.voterMessage(votantId, data.messageId!, data.type);
   }
 
   private async voterMessage(votantId: string, messageId: string, type: string) {
@@ -38,7 +31,6 @@ export class VotesService {
       }
       return this.prisma.vote.update({ where: { id: existant.id }, data: { type: type as any } });
     }
-
     return this.prisma.vote.create({ data: { type: type as any, votantId, messageId } });
   }
 
@@ -57,21 +49,14 @@ export class VotesService {
         await this.prisma.voteDebat.delete({ where: { id: existant.id } });
         result = { action: 'annule', debatId };
       } else {
-        result = await this.prisma.voteDebat.update({
-          where: { id: existant.id },
-          data: { type: type as any },
-        });
+        result = await this.prisma.voteDebat.update({ where: { id: existant.id }, data: { type: type as any } });
       }
     } else {
-      result = await this.prisma.voteDebat.create({
-        data: { type: type as any, votantId, debatId },
-      });
+      result = await this.prisma.voteDebat.create({ data: { type: type as any, votantId, debatId } });
     }
 
-    // Diffuser les nouveaux stats en temps réel
     const stats = await this.votesParDebat(debatId);
     this.gateway?.diffuserVotesDebat(debatId, stats);
-
     return result;
   }
 
@@ -90,11 +75,8 @@ export class VotesService {
     ]);
     const total = pour + contre;
     return {
-      debatId,
-      pour,
-      contre,
-      total,
-      pourcentagePour:   total > 0 ? Math.round((pour   / total) * 100) : 0,
+      debatId, pour, contre, total,
+      pourcentagePour: total > 0 ? Math.round((pour / total) * 100) : 0,
       pourcentageContre: total > 0 ? Math.round((contre / total) * 100) : 0,
     };
   }

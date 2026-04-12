@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Request, UseGuards, Query } from '@nestjs/common';
+// src/gamification/gamification.controller.ts
+import { Controller, Get, Post, Body, Req, UseGuards, Query } from '@nestjs/common';
 import { GamificationService } from './gamification.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -8,39 +9,26 @@ import { Roles } from '../auth/roles.decorator';
 export class GamificationController {
   constructor(private readonly gamificationService: GamificationService) {}
 
-  // GET /api/gamification/classement
-  @UseGuards(JwtAuthGuard)
   @Get('classement')
-  async getClassement(@Query('limite') limite: string = '10') {
-    return this.gamificationService.getClassement(parseInt(limite));
+  async getClassement(@Req() req: any, @Query('limite') limite?: string) {
+    return this.gamificationService.getClassement(req['tenantId'], parseInt(limite ?? '10'));
   }
 
-  // GET /api/gamification/mes-stats
-  @UseGuards(JwtAuthGuard)
+  @Get('challenges')
+  async getChallengesActifs(@Req() req: any) {
+    return this.gamificationService.getChallengesActifs(req['tenantId']);
+  }
+
   @Get('mes-stats')
-  async getMesStats(@Request() req: any) {
+  @UseGuards(JwtAuthGuard)
+  async getMesStats(@Req() req: any) {
     return this.gamificationService.getStatsUtilisateur(req.user.id);
   }
 
-  // GET /api/gamification/challenges
-  @UseGuards(JwtAuthGuard)
-  @Get('challenges')
-  async getChallenges() {
-    return this.gamificationService.getChallengesActifs();
-  }
-
-  // POST /api/gamification/challenges — ADMIN seulement
+  @Post('challenges')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  @Post('challenges')
-  async creerChallenge(@Body() dto: any) {
-    return this.gamificationService.creerChallenge(dto);
-  }
-
-  // POST /api/gamification/verifier-badges
-  @UseGuards(JwtAuthGuard)
-  @Post('verifier-badges')
-  async verifierBadges(@Request() req: any) {
-    return this.gamificationService.verifierBadges(req.user.id);
+  async creerChallenge(@Body() body: any, @Req() req: any) {
+    return this.gamificationService.creerChallenge(req.user.tenantId, body);
   }
 }

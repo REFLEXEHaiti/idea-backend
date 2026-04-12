@@ -1,29 +1,25 @@
-import { Controller, Get, Patch, Request, UseGuards } from '@nestjs/common';
+// src/notifications/notifications.controller.ts
+import { Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('notifications')
+@UseGuards(JwtAuthGuard)
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
-  // GET /api/notifications — mes notifications
-  @UseGuards(JwtAuthGuard)
   @Get()
-  async getMesNotifications(@Request() req: any) {
+  async getMesNotifications(@Req() req: any) {
     return this.notificationsService.getMesNotifications(req.user.id);
   }
 
-  // GET /api/notifications/non-lues — compter les non lues
-  @UseGuards(JwtAuthGuard)
   @Get('non-lues')
-  async compterNonLues(@Request() req: any) {
+  async compterNonLues(@Req() req: any) {
     return this.notificationsService.compterNonLues(req.user.id);
   }
 
-  // PATCH /api/notifications/lire-tout — marquer tout comme lu
-  @UseGuards(JwtAuthGuard)
-  @Patch('lire-tout')
-  async marquerToutesLues(@Request() req: any) {
+  @Post('tout-lire')
+  async marquerToutesLues(@Req() req: any) {
     return this.notificationsService.marquerToutesLues(req.user.id);
   }
 }

@@ -1,27 +1,38 @@
 // src/users/users.controller.ts
-// Gère les routes HTTP liées aux utilisateurs
-// Route de base : GET /api/users/profil (utilisateur connecté)
-
-import { Controller, Get, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, UseGuards, Req } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('users')
+@UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  // GET /api/users/profil — retourne le profil de l'utilisateur connecté
-  // Protégé : nécessite un token JWT valide dans le header Authorization
-  @UseGuards(JwtAuthGuard)
-  @Get('profil')
-  async monProfil(@Request() req: any) {
-    return this.usersService.findById(req.user.id);
+  @Get()
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  async listerTous(@Req() req: any) {
+    return this.usersService.listerParTenant(req.user.tenantId);
   }
 
-  // GET /api/users/:id — retourne le profil d'un utilisateur par ID
-  @UseGuards(JwtAuthGuard)
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  async findById(@Param('id') id: string) {
     return this.usersService.findById(id);
+  }
+
+  @Patch(':id/role')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  async changerRole(@Param('id') id: string, @Body('role') role: string, @Req() req: any) {
+    return this.usersService.changerRole(id, role, req.user.tenantId);
+  }
+
+  @Patch(':id/desactiver')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  async desactiver(@Param('id') id: string, @Req() req: any) {
+    return this.usersService.desactiver(id, req.user.tenantId);
   }
 }

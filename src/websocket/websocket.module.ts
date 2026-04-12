@@ -3,6 +3,6 @@ import { DebatsGateway } from './debats.gateway';
 
 @Module({
   providers: [DebatsGateway],
-  exports:   [DebatsGateway],
+  exports: [DebatsGateway],
 })
 export class WebsocketModule {}

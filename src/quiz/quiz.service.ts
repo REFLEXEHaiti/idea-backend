@@ -1,70 +1,56 @@
+// src/quiz/quiz.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreerQuizDto } from './dto/creer-quiz.dto';
-import { SoumettreQuizDto } from './dto/soumettre-quiz.dto';
 
 @Injectable()
 export class QuizService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async creer(dto: CreerQuizDto) {
+  async creer(data: { leconId: string; questions: any[] }) {
     return this.prisma.quiz.create({
-      data: {
-        leconId: dto.leconId,
-        questions: dto.questions,
-      },
+      data: { leconId: data.leconId, questions: data.questions },
     });
   }
 
-  // Soumettre les réponses et calculer le score
-  async soumettre(userId: string, dto: SoumettreQuizDto) {
-    const quiz = await this.prisma.quiz.findUnique({
-      where: { id: dto.quizId },
-    });
+  async findByLecon(leconId: string) {
+    return this.prisma.quiz.findUnique({ where: { leconId } });
+  }
+
+  async soumettre(userId: string, quizId: string, reponses: number[]) {
+    const quiz = await this.prisma.quiz.findUnique({ where: { id: quizId } });
     if (!quiz) throw new NotFoundException('Quiz introuvable');
 
     const questions = quiz.questions as any[];
     let bonnesReponses = 0;
-
-    // Calculer le score
-    questions.forEach((q, index) => {
-      if (dto.reponses[index] === q.reponse) {
-        bonnesReponses++;
-      }
-    });
-
+    questions.forEach((q, i) => { if (reponses[i] === q.reponse) bonnesReponses++; });
     const score = Math.round((bonnesReponses / questions.length) * 100);
 
-    // Sauvegarder le résultat
     const resultat = await this.prisma.resultatQuiz.create({
-      data: {
-        userId,
-        quizId: dto.quizId,
-        score,
-        reponses: dto.reponses,
-      },
+      data: { userId, quizId, score, reponses },
+    });
+
+    // Attribuer des points de gamification
+    await this.prisma.pointsUtilisateur.upsert({
+      where: { userId },
+      update: { points: { increment: score >= 70 ? 20 : 10 } },
+      create: { userId, points: score >= 70 ? 20 : 10 },
     });
 
     return {
       score,
       bonnesReponses,
       totalQuestions: questions.length,
-      reussi: score >= 70, // 70% pour réussir
+      reussi: score >= 70,
       resultat,
     };
   }
 
-  // Historique des résultats d'un utilisateur
   async getMesResultats(userId: string) {
     return this.prisma.resultatQuiz.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       include: {
-        quiz: {
-          include: {
-            lecon: { select: { titre: true, coursId: true } },
-          },
-        },
+        quiz: { include: { lecon: { select: { titre: true, coursId: true } } } },
       },
     });
   }

@@ -1,81 +1,53 @@
-import { Controller, Get, Post, Patch, Body, Param, Request, UseGuards } from '@nestjs/common';
+// src/tournois/tournois.controller.ts
+import { Controller, Get, Post, Param, Body, Req, UseGuards } from '@nestjs/common';
 import { TournoisService } from './tournois.service';
-import { CreerTournoiDto } from './dto/creer-tournoi.dto';
-import { CreerEquipeDto } from './dto/creer-equipe.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { IsNumber } from 'class-validator';
-
-class ResultatMatchDto {
-  @IsNumber()
-  scoreEquipe1: number;
-  @IsNumber()
-  scoreEquipe2: number;
-}
 
 @Controller('tournois')
 export class TournoisController {
   constructor(private readonly tournoisService: TournoisService) {}
 
-  // POST /api/tournois — ADMIN et FORMATEUR
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'FORMATEUR')
-  @Post()
-  async creer(@Request() req: any, @Body() dto: CreerTournoiDto) {
-    return this.tournoisService.creer(req.user.id, dto);
-  }
-
-  // GET /api/tournois
-  @UseGuards(JwtAuthGuard)
   @Get()
-  async listerTous() {
-    return this.tournoisService.listerTous();
+  async listerTous(@Req() req: any) {
+    return this.tournoisService.listerTous(req['tenantId']);
   }
 
-  // GET /api/tournois/:id
-  @UseGuards(JwtAuthGuard)
   @Get(':id')
-  async findById(@Param('id') id: string) {
-    return this.tournoisService.findById(id);
+  async findById(@Param('id') id: string, @Req() req: any) {
+    return this.tournoisService.findById(id, req['tenantId']);
   }
 
-  // POST /api/tournois/inscrire — tous les connectés
+  @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'FORMATEUR')
+  async creer(@Body() body: any, @Req() req: any) {
+    return this.tournoisService.creer(req.user.id, req.user.tenantId, body);
+  }
+
+  @Post(':id/inscrire')
   @UseGuards(JwtAuthGuard)
-  @Post('inscrire')
-  async inscrireEquipe(@Request() req: any, @Body() dto: CreerEquipeDto) {
-    return this.tournoisService.inscrireEquipe(req.user.id, dto);
+  async inscrireEquipe(@Param('id') tournoiId: string, @Body() body: any, @Req() req: any) {
+    return this.tournoisService.inscrireEquipe(req.user.id, req.user.tenantId, { ...body, tournoiId });
   }
 
-  // POST /api/tournois/:id/generer-calendrier — ADMIN et FORMATEUR
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'FORMATEUR')
-  @Post(':id/generer-calendrier')
-  async genererCalendrier(@Param('id') id: string) {
-    return this.tournoisService.genererCalendrier(id);
-  }
-
-  // POST /api/tournois/tirer-sujet — ADMIN
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'FORMATEUR')
-  @Post('tirer-sujet')
-  async tirerSujet() {
-    const sujet = await this.tournoisService.tirerSujetIA();
-    return { sujet };
-  }
-
-  // PATCH /api/tournois/matchs/:id/resultat — ADMIN
+  @Post(':id/calendrier')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  @Patch('matchs/:id/resultat')
+  async genererCalendrier(@Param('id') tournoiId: string, @Req() req: any) {
+    return this.tournoisService.genererCalendrier(tournoiId, req.user.tenantId);
+  }
+
+  @Post('matchs/:matchId/resultat')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   async enregistrerResultat(
-    @Param('id') matchId: string,
-    @Body() dto: ResultatMatchDto,
+    @Param('matchId') matchId: string,
+    @Body('scoreEquipe1') scoreEquipe1: number,
+    @Body('scoreEquipe2') scoreEquipe2: number,
+    @Req() req: any,
   ) {
-    return this.tournoisService.enregistrerResultat(
-      matchId,
-      dto.scoreEquipe1,
-      dto.scoreEquipe2,
-    );
+    return this.tournoisService.enregistrerResultat(matchId, scoreEquipe1, scoreEquipe2, req.user.tenantId);
   }
 }

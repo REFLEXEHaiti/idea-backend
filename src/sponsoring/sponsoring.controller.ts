@@ -1,55 +1,51 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
+// src/sponsoring/sponsoring.controller.ts
+import { Controller, Get, Post, Patch, Delete, Param, Body, Req, UseGuards } from '@nestjs/common';
 import { SponsoringService } from './sponsoring.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 
-@Controller('sponsoring')
+@Controller('sponsors')
 export class SponsoringController {
   constructor(private readonly sponsoringService: SponsoringService) {}
 
+  @Get()
+  async getSponsorsActifs(@Req() req: any) {
+    return this.sponsoringService.getSponsorsActifs(req['tenantId']);
+  }
+
+  @Get('admin/tous')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  @Post('sponsors')
-  async creerSponsor(@Body() body: any) {
-    return this.sponsoringService.creerSponsor(body);
+  async listerTous(@Req() req: any) {
+    return this.sponsoringService.listerTous(req.user.tenantId);
   }
 
-  @Get('sponsors')
-  async getSponsorsActifs() {
-    return this.sponsoringService.getSponsorsActifs();
-  }
-
+  @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  @Get('sponsors/tous')
-  async listerTous() {
-    return this.sponsoringService.listerTous();
+  async creer(@Body() body: any, @Req() req: any) {
+    return this.sponsoringService.creerSponsor(req.user.tenantId, body);
   }
 
-  @Get('tournois/:tournoiId')
-  async getSponsorsTournoi(@Param('tournoiId') tournoiId: string) {
-    return this.sponsoringService.getSponsorsTournoi(tournoiId);
-  }
-
+  @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  @Post('associer')
-  async associer(@Body() body: { sponsorId: string; tournoiId: string }) {
-    return this.sponsoringService.associerSponsorTournoi(body.sponsorId, body.tournoiId);
+  async modifier(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.sponsoringService.modifierSponsor(id, req.user.tenantId, body);
   }
 
+  @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  @Patch('sponsors/:id')
-  async modifierSponsor(@Param('id') id: string, @Body() body: any) {
-    return this.sponsoringService.modifierSponsor(id, body);
+  async supprimer(@Param('id') id: string, @Req() req: any) {
+    return this.sponsoringService.supprimerSponsor(id, req.user.tenantId);
   }
 
+  @Post(':id/associer-tournoi')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  @Delete('sponsors/:id')
-  async supprimerSponsor(@Param('id') id: string) {
-    return this.sponsoringService.supprimerSponsor(id);
+  async associerTournoi(@Param('id') sponsorId: string, @Body('tournoiId') tournoiId: string) {
+    return this.sponsoringService.associerSponsorTournoi(sponsorId, tournoiId);
   }
 }
