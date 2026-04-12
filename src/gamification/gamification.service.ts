@@ -88,17 +88,19 @@ export class GamificationService {
   }
 
   async getClassement(tenantId: string, limite = 10) {
-    return this.prisma.pointsUtilisateur.findMany({
-      take: limite,
-      orderBy: { points: 'desc' },
-      include: {
-        user: {
-          where: { tenantId },
-          select: { id: true, prenom: true, nom: true, photoUrl: true, role: true },
-        },
+  return this.prisma.pointsUtilisateur.findMany({
+    take: limite,
+    where: {
+      user: { tenantId },        // ← filtre tenant ici
+    },
+    orderBy: { points: 'desc' },
+    include: {
+      user: {
+        select: { id: true, prenom: true, nom: true, photoUrl: true, role: true },
       },
-    });
-  }
+    },
+  });
+}
 
   async getChallengesActifs(tenantId: string) {
     const maintenant = new Date();
