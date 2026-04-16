@@ -53,7 +53,7 @@ async function bootstrap() {
   }
 
   // En dev : accepter tous les sous-domaines vercel.app et localhost
-  if (configService.get<string>('nodeEnv') !== 'production') {
+  if (true) {
     originesAutorisees.push(/\.vercel\.app$/);
     originesAutorisees.push(/localhost:\d+$/);
   }
